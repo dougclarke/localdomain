@@ -1,2 +1,2 @@
-# localdomain
-Home on the Interwebs
+# LocalDomain
+Home on the Interwebs.
