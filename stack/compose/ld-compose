@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+IFS=$'\n\t'
+
+UNAMEOUT="$(uname -s)"
+
+WHITE='\033[1;37m'
+RED='\033[1;91m'
+NC='\033[0m'
+
+# Verify operating system is supported...
+case "${UNAMEOUT}" in
+  Linux*)             MACHINE=linux;;
+  Darwin*)            MACHINE=mac;;
+  *)                  MACHINE="UNKNOWN"
+esac
+
+if [ "$MACHINE" == "UNKNOWN" ]; then
+  echo -e "${RED}Unsupported operating system ${WHITE}[${UNAMEOUT}]${NC}. LD-Compose supports MacOS, Linux, and Windows/WSL2." >&2
+  exit 1
+fi
+
+# Define local variables...
+ACTION=""
+POST_INSTALL=""
+CONTAINER_TYPE=${CONTAINER_TYPE:-"podman"}
+COMPOSER_TYPE=${COMPOSER_TYPE:-"podman-compose"}
+PSRESULT=""
+EXEC=""
+DRY_RUN=""
+
+# Define environment variables...
+export WWWUSER=${WWWUSER:-$(id -u)}
+export WWWGROUP=${WWWGROUP:-$(id -g)}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    "build")
+      ACTION="build"
+      break
+      ;;
+    "up")
+      ACTION="up"
+      break
+      ;;
+    "down")
+      ACTION="down"
+      break
+      ;;
+  esac
+  # shift
+  shift
+done
+
+# Function that outputs Container stack is not running...
+function stack_is_not_running {
+  echo -e "${WHITE}Container stack is not running.${NC}" >&2
+  echo "" >&2
+  echo -e "${WHITE}Launch the stack using the following command:${NC} './ld-compose up' or './ld-compose up -d'" >&2
+  exit 1
+}
+
+# Source the ".env" file and setup some vars...
+function _env {
+  if [ -f ./.env ]; then
+    echo -e "Sourcing the .env file..."
+    source ./.env
+    APP_ABBR=${APP_ABBR:-"ld"}
+    APP_NAME=${APP_NAME:-"LocalDomain"}
+    APP_PORT=${APP_PORT:-"8080"}
+    IMAGE_NAME=${IMAGE_NAME:-"alpine-${ABBR}-php"}
+  else
+    echo -e "No .env file found... skipping"
+  fi
+}
+
+# Build the containers...
+if [ "$ACTION" == "build" ]; then
+  _env
+  echo -e "Building the application container for ${APP_NAME}..."
+  podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile --userns='host' ../php-fpm
+
+# Bring up the stack...
+elif [ "$ACTION" == "up" ]; then
+  _env
+  echo -e "Setting up the ${APP_NAME} application stack..."
+  podman pod create --name=${APP_NAME} --share net -p ${APP_PORT}:8080
+
+  echo -e "Setting up the ${APP_NAME} MySQL and Redis volumes..."
+  podman volume inspect ${APP_NAME}_mysqldata || podman volume create ${APP_NAME}_mysqldata
+  podman volume inspect ${APP_NAME}_redisdata || podman volume create ${APP_NAME}_redisdata
+
+  ADD_HOSTS="--add-host ${APP_ABBR}-php:127.0.0.1 --add-host ${APP_ABBR}-mysql:127.0.0.1 --add-host ${APP_ABBR}-nginx:127.0.0.1 --add-host ${APP_ABBR}-redis:127.0.0.1"
+  LABELS="-l io.podman.compose.config-hash=123 -l io.podman.compose.project=${APP_NAME} -l io.podman.compose.version=0.0.1 -l com.docker.compose.container-number=1"
+
+  echo -e "Starting up the MySQL container [${APP_ABBR}-mysql]..."
+  podman run --name=${APP_ABBR}-mysql -d --pod=${APP_NAME} \
+    -e MYSQL_DATABASE={$DB_DATABASE} \
+    -e MYSQL_ROOT_PASSWORD={$DB_ROOT_PASSWORD} \
+    -e MYSQL_PASSWORD={$DB_PASSWORD} \
+    -e MYSQL_USER={$DB_USERNAME} \
+    --mount type=bind,source=../mysql/initdb.d,destination=/docker-entrypoint-initdb.d \
+    --mount type=bind,source=~/.local/share/containers/storage/volumes/${APP_NAME}_mysqldata/_data,destination=/var/lib/mysql,bind-propagation=Z \
+    ${ADD_HOSTS} \
+    ${LABELS} -l com.docker.compose.service=${APP_ABBR}-mysql \
+    --health-cmd='/bin/sh -c mysqladmin ping' \
+    mysql:8.0
+
+  echo -e "Starting up the Nginx container [${APP_ABBR}-nginx]..."
+  podman run --name==${APP_ABBR}-nginx -d --pod=${APP_NAME} \
+    --mount type=bind,source=../../,destination=/var/www \
+    --mount type=bind,source=../nginx/conf.d,destination=/etc/nginx/conf.d \
+    ${ADD_HOSTS} \
+    ${LABELS} \
+    -l com.docker.compose.service==${APP_ABBR}-nginx \
+    nginxinc/nginx-unprivileged:1.18-alpine
+
+  echo -e "Starting up the Redis container [${APP_ABBR}-redis]...";
+  podman run --name=${APP_ABBR}-redis -d --pod=${APP_NAME} \
+    --mount type=bind,source=~/.local/share/containers/storage/volumes/${APP_NAME}_redisdata/_data,destination=/data,bind-propagation=Z \
+    ${ADD_HOSTS} \
+    ${LABELS} -l com.docker.compose.service=${APP_ABBR}-redis\
+    --health-cmd='/bin/sh -c redis-cli ping' \
+    redis:6-alpine
+
+  echo -e "Starting up the PHP-FPM container [${APP_ABBR}-php]..."
+  podman run --name=${APP_ABBR}-php -d --pod=${APP_NAME} --userns=host \
+    --mount type=bind,source=../../,destination=/var/www/ \
+    ${ADD_HOSTS} \
+    ${LABELS} -l com.docker.compose.service=${APP_ABBR}-php \
+    -w /var/www/ \
+    alpine-${APP_ABBR}-php
+  echo -e "[\033[1;32mDONE\033[0m]\n"
+  exit 0
+
+# Bring down the stack...
+elif [ "${ACTION}" == "down" ]; then
+  _env
+  echo -e "Bringing down the ${APP_NAME} stack..."
+  podman stop -t=1 ${APP_ABBR}-mysql
+  podman stop -t=1 ${APP_ABBR}-nginx
+  podman stop -t=1 ${APP_ABBR}-redis
+  podman stop -t=1 ${APP_ABBR}-php
+  podman rm ${APP_ABBR}-mysql
+  podman rm ${APP_ABBR}-nginx
+  podman rm ${APP_ABBR}-redis
+  podman rm ${APP_ABBR}-php
+  echo -e "[\033[1;32mDONE\033[0m]\n"
+  echo "Stopping the ${APP_NAME} pod..."
+  podman pod rm ${APP_NAME}
+  echo -e "[\033[1;32mDONE\033[0m]\n"
+  exit 0
+
+else
+  echo -e "${RED}No action was specified!${NC} use ${WHITE}build, up, down."
+  exit 1
+fi
+
+echo -e "${WHITE}DONE!${NC}"
+exit 0
