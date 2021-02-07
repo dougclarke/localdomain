@@ -80,7 +80,7 @@ class PodGenerate extends Command
           if($this->option('user')){
             $user_dir = "{$home}/.config/systemd/user";
             if(!is_dir($user_dir)) mkdir($user_dir,0755,true);
-            exec("sudo cp {$service_files} {$user_dir}");
+            exec("cp {$service_files} {$user_dir}");
             exec("systemctl enable {$pod_service_file}");
           }
 

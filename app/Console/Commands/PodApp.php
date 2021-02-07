@@ -4,14 +4,14 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 
-class PodPass extends Command
+class PodApp extends Command
 {
     /**
      * The name and signature of the console command.
      *
      * @var string
      */
-    protected $signature = 'pod:pass {cmd*} {--force} {--seed} {--pretend} (--class=?)';
+    protected $signature = 'pod:app {cmd*} {--force} {--seed} {--pretend} (--class=?)';
 
     /**
      * The console command description.
