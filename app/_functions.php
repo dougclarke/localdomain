@@ -6,6 +6,18 @@ function got_podman(){
   else return false;
 }
 
+function got_compoer(){
+  $output = null;
+  if(exec('composer --version 2> /dev/null', $output)) return $output[0];
+  else return false;
+}
+
+function got_npm(){
+  $output = null;
+  if(exec('npm -v 2> /dev/null', $output)) return $output[0];
+  else return false;
+}
+
 function _pw($l=32){
   $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!-.[]?*()';
   $pw = '';
