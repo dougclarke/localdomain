@@ -37,9 +37,8 @@ class PodInit extends Command
      */
     public function handle()
     {
-      // check for podman, composer and npm
-      if(!got_composer()) die($this->error("The php composer command was not found."));
-      if(!got_npm()) die($this->error("The nodejs npm command was not found."));
+      // check for podman and npm
+      if(!got_npm()) die($this->error("The npm command was not found."));
       if(!got_podman()) die($this->error("The podman command was not found."));
 
       $prod = ($this->option('prod')) ? $this->option('prod') : false;
@@ -64,17 +63,32 @@ class PodInit extends Command
         }
       }
 
+      $APP_KEY = env('APP_KEY', false);
+      $DB_DATABASE = env('DB_DATABASE',false);
+      $DB_USERNAME = env('DB_USERNAME',false);
+      $DB_PASSWORD = env('DB_PASSWORD',false);
+
+      if(!$APP_KEY){
+        $do_key = $this->choice("There is no APP_KEY set. Would you like to generate one now?", ['Yes','No'], 1);
+        if($do_key){
+          $this->call("key:generate");
+        }
+        else {
+          die($this->error("You must configure your .env file including APP_KEY"));
+        }
+      }
+
+      if(!$DB_DATABASE || !$DB_USERNAME || !$DB_PASSWORD){
+        die($this->error("You need to configure your MySQL settings in your .env file."));
+      }
+
       $install = "";
 
       if($prod){
-        $install = "composer install --optimize-autoloader --no-dev && \
-          npm install --production && \
-          npm run prod";
+        $install = "npm install --production && npm run prod";
       }
       else {
-        $install = "composer install && \
-          npm install && \
-          npm run dev";
+        $install = "npm install && npm run dev";
       }
 
       exec($install, $output, $retval);

@@ -87,14 +87,28 @@ class PodUp extends Command
       $base_dir = base_path();
       $stack_dir = $base_dir."/stack";
       $vol_dir = $_SERVER['HOME']."/.local/share/containers/storage/volumes";
-      $DB_DATABASE = env('DB_DATABASE');
+      $APP_KEY = env('APP_KEY', false);
       $DB_HOST = env('DB_HOST');
       $DB_PORT = env('DB_PORT');
-      $DB_DATABASE = env('DB_DATABASE');
-      $DB_USERNAME = env('DB_USERNAME');
-      $DB_PASSWORD = env('DB_PASSWORD');
+      $DB_DATABASE = env('DB_DATABASE',false);
+      $DB_USERNAME = env('DB_USERNAME',false);
+      $DB_PASSWORD = env('DB_PASSWORD',false);
       $DB_ROOT_PASSWORD = $DB_PASSWORD.$DB_PASSWORD;
       $add_hosts = "";
+
+      if(!$APP_KEY){
+        $do_key = $this->choice("There is no APP_KEY set. Would you like to generate one now?", ['Yes','No'], 1);
+        if($do_key){
+          $this->call("key:generate");
+        }
+        else {
+          die($this->error("You must configure your .env file including APP_KEY"));
+        }
+      }
+
+      if(!$DB_DATABASE || !$DB_USERNAME || !$DB_PASSWORD){
+        die($this->error("You need to configure your MySQL settings in your .env file."));
+      }
 
       if($zap){
         $add_hosts = "--add-host {$abbr}-zap:127.0.0.1 --add-host {$abbr}-php:127.0.0.1 --add-host {$abbr}-mysql:127.0.0.1 --add-host {$abbr}-nginx:127.0.0.1 --add-host {$abbr}-redis:127.0.0.1";
@@ -112,8 +126,8 @@ class PodUp extends Command
         exec("podman pod create --name={$app_name} --share net -p 8080:8080 -p 8090:8090", $output);
 
         // Create the ZAP data and conf dirs if they do not exist
-        if(!is_dir("./stack/zap/data")) mkdir("./stack/zap/data", 0754, true);
-        if(!is_dir("./stack/zap/conf")) mkdir("./stack/zap/conf", 0754, true);
+        if(!is_dir(base_dir()."/stack/zap/data")) mkdir(base_dir()."/stack/zap/data", 0754, true);
+        if(!is_dir(base_dir()."/stack/zap/conf")) mkdir(base_dir()."/stack/zap/conf", 0754, true);
 
         # OWASP ZAP container
         echo "Starting up the ZAP container [{$abbr}-zap]...\t";
@@ -139,6 +153,8 @@ class PodUp extends Command
 
       # MySQL container
       echo "Starting up the MySQL container [{$abbr}-mysql]...\t";
+      if(!is_dir(base_dir()."/stack/mysql/db")) mkdir(base_dir()."/stack/mysql/db", 0754, true);
+      if(!is_dir(base_dir()."/stack/mysql/initdb.d")) mkdir(base_dir()."/stack/mysql/initdb.d", 0754, true);
       exec("podman run --name={$abbr}-mysql -d --pod={$app_name} \
         -e MYSQL_DATABASE={$DB_DATABASE} \
         -e MYSQL_ROOT_PASSWORD={$DB_ROOT_PASSWORD} \
