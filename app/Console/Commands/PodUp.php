@@ -126,8 +126,8 @@ class PodUp extends Command
         exec("podman pod create --name={$app_name} --share net -p 8080:8080 -p 8090:8090", $output);
 
         // Create the ZAP data and conf dirs if they do not exist
-        if(!is_dir(base_dir()."/stack/zap/data")) mkdir(base_dir()."/stack/zap/data", 0754, true);
-        if(!is_dir(base_dir()."/stack/zap/conf")) mkdir(base_dir()."/stack/zap/conf", 0754, true);
+        if(!is_dir(base_path()."/stack/zap/data")) mkdir(base_path()."/stack/zap/data", 0754, true);
+        if(!is_dir(base_path()."/stack/zap/conf")) mkdir(base_path()."/stack/zap/conf", 0754, true);
 
         # OWASP ZAP container
         echo "Starting up the ZAP container [{$abbr}-zap]...\t";
@@ -153,8 +153,8 @@ class PodUp extends Command
 
       # MySQL container
       echo "Starting up the MySQL container [{$abbr}-mysql]...\t";
-      if(!is_dir(base_dir()."/stack/mysql/db")) mkdir(base_dir()."/stack/mysql/db", 0754, true);
-      if(!is_dir(base_dir()."/stack/mysql/initdb.d")) mkdir(base_dir()."/stack/mysql/initdb.d", 0754, true);
+      if(!is_dir(base_path()."/stack/mysql/db")) mkdir(base_path()."/stack/mysql/db", 0754, true);
+      if(!is_dir(base_path()."/stack/mysql/initdb.d")) mkdir(base_path()."/stack/mysql/initdb.d", 0754, true);
       exec("podman run --name={$abbr}-mysql -d --pod={$app_name} \
         -e MYSQL_DATABASE={$DB_DATABASE} \
         -e MYSQL_ROOT_PASSWORD={$DB_ROOT_PASSWORD} \
