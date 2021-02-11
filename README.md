@@ -17,9 +17,13 @@ Podman, PHP
 
 ## Installation
 `$ git clone https://github.com/dougclarke/localdomain.git ./some-app`
+
 `$ cd some-app`
+
 `$ composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist`
+
 `$ cp .env-example .env && vi .env`
+
 `$ php artisan pod:init --prod`
 
 ## Usage
