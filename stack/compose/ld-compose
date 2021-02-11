@@ -46,6 +46,10 @@ while [ $# -gt 0 ]; do
       ACTION="down"
       break
       ;;
+    "init")
+      ACTION="init"
+      break
+      ;;
   esac
   # shift
   shift
@@ -150,6 +154,18 @@ elif [ "${ACTION}" == "down" ]; then
   echo -e "[\033[1;32mDONE\033[0m]\n"
   exit 0
 
+# Initialize the Laravel app from within the container...
+elif [ "$ACTION" == "init" ]; then
+  _env
+  echo -e "Running composer install..."
+  podman exec -it ${APP_ABBR}-php composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+  echo -e "Running npm install and build..."
+  podman exec -it ${APP_ABBR}-php npm install --production && npm run prod
+  echo -e "Running Laravel migrations..."
+  podman exec -it ${APP_ABBR}-php php artisan migrate
+  echo -e "[\033[1;32mDONE\033[0m]\n"
+  exit 0
+  
 else
   echo -e "${RED}No action was specified!${NC} use ${WHITE}build, up, down."
   exit 1
