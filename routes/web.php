@@ -13,7 +13,14 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+if(!config('app.allow_reg')){
+  Route::get('/register', function () {
+    abort("403");
+  });
+}
+
 Route::get('/', function () {
+  // dd(config('fortify.features'));
     return view('welcome');
 });
 

@@ -125,6 +125,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | New User Registration
+    |--------------------------------------------------------------------------
+    |
+    | Enable or disable the ability to register new users by effectively
+    | disabling the registration route.
+    |
+    */
+
+    'allow_reg' => env('ALLOW_REG', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Autoloaded Service Providers
     |--------------------------------------------------------------------------
     |
