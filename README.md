@@ -1,5 +1,7 @@
 # LocalDomain
-Home on the Interwebs. Loosely inspired by the [Laravel Sail](https://laravel.com/docs/8.x/sail) project, LocalDomain is a PHP / Laravel based application stack with custom artisan commands for managing the entire stack using Podman rather than Docker.
+Home on the Interwebs. Loosely inspired by the [Laravel Sail](https://laravel.com/docs/8.x/sail) project, LocalDomain is a PHP / Laravel based application stack with custom artisan commands for building and managing the entire stack using rootless, non-root containers with Podman rather than Docker.
+
+The only thing that sudo / root is required for here is installing the systemd files generated from the pod if you so desire.
 
 Currently the stack is built / composed from the following container images:
 
@@ -14,11 +16,13 @@ Currently the stack is built / composed from the following container images:
 Podman, PHP
 
 ## Installation
-`$ git clone {this-repo} ./some-app`
+`$ git clone https://github.com/dougclarke/localdomain.git ./some-app`
+`$ cd some-app`
+`$ composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist`
+`$ cp .env-example .env && vi .env`
+`$ php artisan pod:init --prod`
 
 ## Usage
-
-`php artisan pod:build`
 
 `php artisan pod:up`
 
