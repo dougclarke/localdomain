@@ -23,16 +23,14 @@ fi
 
 # Define local variables...
 ACTION=""
-POST_INSTALL=""
-CONTAINER_TYPE=${CONTAINER_TYPE:-"podman"}
-COMPOSER_TYPE=${COMPOSER_TYPE:-"podman-compose"}
-PSRESULT=""
-EXEC=""
-DRY_RUN=""
+# POST_INSTALL=""
+# PSRESULT=""
+# EXEC=""
+# DRY_RUN=""
 
 # Define environment variables...
 export WWWUSER=${WWWUSER:-$(id -u)}
-export WWWGROUP=${WWWGROUP:-$(id -g)}
+export WWWUID=${WWWUID:-$(id -n)}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -66,26 +64,26 @@ function _env {
   if [ -f ./.env ]; then
     echo -e "Sourcing the .env file..."
     source ./.env
-    APP_ABBR=${APP_ABBR:-"ld"}
-    APP_NAME=${APP_NAME:-"LocalDomain"}
-    APP_PORT=${APP_PORT:-"8080"}
-    IMAGE_NAME=${IMAGE_NAME:-"alpine-${ABBR}-php"}
   else
     echo -e "No .env file found... skipping"
   fi
+  APP_ABBR=${APP_ABBR:-"ld"}
+  APP_NAME=${APP_NAME:-"LocalDomain"}
+  POD_PORT=${POD_PORT:-"8080"}
+  IMAGE_NAME=${IMAGE_NAME:-"alpine-${ABBR}-php"}
 }
 
 # Build the containers...
 if [ "$ACTION" == "build" ]; then
   _env
-  echo -e "Building the application container for ${APP_NAME}..."
-  podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile --userns='host' ../php-fpm
+  echo -e "Building the application container image for ${APP_NAME}..."
+  podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile-composer --build-arg=uid=${WWWUID} --build-arg=user=${WWWUSER} ../php-fpm
 
 # Bring up the stack...
 elif [ "$ACTION" == "up" ]; then
   _env
   echo -e "Setting up the ${APP_NAME} application stack..."
-  podman pod create --name=${APP_NAME} --share net -p ${APP_PORT}:8080
+  podman pod create --name=${APP_NAME} --share net -p ${POD_PORT}:8080
 
   echo -e "Setting up the ${APP_NAME} MySQL and Redis volumes..."
   podman volume inspect ${APP_NAME}_mysqldata || podman volume create ${APP_NAME}_mysqldata
