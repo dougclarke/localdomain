@@ -29,8 +29,8 @@ ACTION=""
 # DRY_RUN=""
 
 # Define environment variables...
-export WWWUSER=${WWWUSER:-$(id -u)}
-export WWWUID=${WWWUID:-$(id -n)}
+export WWWUSER=${WWWUSER:-$(id -un)}
+export WWWUID=${WWWUID:-$(id -u)}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -74,7 +74,7 @@ function _env {
   APP_ABBR=${APP_ABBR:-"ld"}
   APP_NAME=${APP_NAME:-"LocalDomain"}
   POD_PORT=${POD_PORT:-"8080"}
-  IMAGE_NAME=${IMAGE_NAME:-"alpine-${ABBR}-php"}
+  IMAGE_NAME=${IMAGE_NAME:-"alpine-${APP_ABBR}-php"}
 }
 
 # Build the containers...
@@ -156,16 +156,54 @@ elif [ "${ACTION}" == "down" ]; then
 
 # Initialize the Laravel app from within the container...
 elif [ "$ACTION" == "init" ]; then
+  if [ ! -f "../../.env" ]; then
+    cp ../../.env-example ../../.env
+  fi
+
   _env
+
+  # podman build -t alpine-ld-php-installer --userns='host' -f ../php-fpm/Containerfile-composer ../php-fpm
+  echo -e "Building the installer image..."
+  podman build -t ${IMAGE_NAME}-installer --userns='host' -f ../php-fpm/Containerfile-composer ../php-fpm
+
+  # podman pod create --name=LocalDomain --share net
+  echo -e "Setting up the pod..."
+  podman pod create --name=${APP_NAME} --share net
+
+  # podman run --name=ld-php-installer -d --pod=LocalDomain --userns=host --mount type=bind,source=../../,destination=/var/www/ -w /var/www/ alpine-ld-php-installer
+  echo -e "Starting up the installer container..."
+  podman run --name=${APP_ABBR}-php-installer -d --pod=${APP_NAME} --userns=host --mount type=bind,source=../../,destination=/var/www/ -w /var/www/ alpine-${APP_ABBR}-php-installer
+
+  # podman exec -it ld-php-installer composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
   echo -e "Running composer install..."
-  podman exec -it ${APP_ABBR}-php composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+  podman exec -it ${APP_ABBR}-php-installer composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+  # podman exec -it ld-php-installer npm install && npm run prod
   echo -e "Running npm install and build..."
-  podman exec -it ${APP_ABBR}-php npm install --production && npm run prod
-  echo -e "Running Laravel migrations..."
-  podman exec -it ${APP_ABBR}-php php artisan migrate
-  echo -e "[\033[1;32mDONE\033[0m]\n"
+  podman exec -it ${APP_ABBR}-php-installer npm install && npm run prod
+
+  echo -e "Generating Laravel key..."
+  podman exec -it ${APP_ABBR}-php-installer php artisan key:generate
+
+  # dont run migrations on init.
+  # echo -e "Running Laravel migrations..."
+  # podman exec -it ${APP_ABBR}-php-installer npm install && npm run prod
+
+  echo -e "Stoping and removing the installer container..."
+  podman stop -t=1 ${APP_ABBR}-php-installer
+  podman rm ${APP_ABBR}-php-installer
+
+  echo -e "Removing the pod..."
+  podman pod rm ${APP_NAME}
+
+  echo -e "[\033[1;32mDONE\033[0m] Don't forget to configure your .env!\n"
   exit 0
-  
+
+# Run the application database migrations
+elif [ "$ACTION" == "migrate" ]; then
+  echo "Running database migrations..."
+  podman exec -it ${APP_ABBR}-php php artisan migrate
+
 else
   echo -e "${RED}No action was specified!${NC} use ${WHITE}build, up, down."
   exit 1
