@@ -157,7 +157,7 @@ elif [ "${ACTION}" == "down" ]; then
 # Initialize the Laravel app from within the container...
 elif [ "$ACTION" == "init" ]; then
   if [ ! -f "../../.env" ]; then
-    cp ../../.env-example ../../.env
+    cp ../../.env.example ../../.env
   fi
 
   _env
@@ -180,7 +180,8 @@ elif [ "$ACTION" == "init" ]; then
 
   # podman exec -it ld-php-installer npm install && npm run prod
   echo -e "Running npm install and build..."
-  podman exec -it ${APP_ABBR}-php-installer npm install && npm run prod
+  podman exec -it ${APP_ABBR}-php-installer npm install
+  podman exec -it ${APP_ABBR}-php-installer npm run prod
 
   echo -e "Generating Laravel key..."
   podman exec -it ${APP_ABBR}-php-installer php artisan key:generate
