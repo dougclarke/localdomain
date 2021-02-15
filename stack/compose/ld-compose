@@ -50,6 +50,10 @@ while [ $# -gt 0 ]; do
       ACTION="init"
       break
       ;;
+    "migrate")
+      ACTION="migrate"
+      break
+      ;;
   esac
   # shift
   shift
@@ -65,9 +69,9 @@ function stack_is_not_running {
 
 # Source the ".env" file and setup some vars...
 function _env {
-  if [ -f ./.env ]; then
+  if [ -f ../../.env ]; then
     echo -e "Sourcing the .env file..."
-    source ./.env
+    source ../../.env
   else
     echo -e "No .env file found... skipping"
   fi
@@ -93,35 +97,38 @@ elif [ "$ACTION" == "up" ]; then
   podman volume inspect ${APP_NAME}_mysqldata || podman volume create ${APP_NAME}_mysqldata
   podman volume inspect ${APP_NAME}_redisdata || podman volume create ${APP_NAME}_redisdata
 
-  ADD_HOSTS="--add-host ${APP_ABBR}-php:127.0.0.1 --add-host ${APP_ABBR}-mysql:127.0.0.1 --add-host ${APP_ABBR}-nginx:127.0.0.1 --add-host ${APP_ABBR}-redis:127.0.0.1"
   LABELS="-l io.podman.compose.config-hash=123 -l io.podman.compose.project=${APP_NAME} -l io.podman.compose.version=0.0.1 -l com.docker.compose.container-number=1"
 
   echo -e "Starting up the MySQL container [${APP_ABBR}-mysql]..."
+  [[ -d ../mysql ]] || mkdir ../mysql
+  [[ -d ../mysql/db ]] || mkdir ../mysql/db
+  [[ -d ../mysql/initdb.d ]] || mkdir ../mysql/initdb.d
+
   podman run --name=${APP_ABBR}-mysql -d --pod=${APP_NAME} \
-    -e MYSQL_DATABASE={$DB_DATABASE} \
-    -e MYSQL_ROOT_PASSWORD={$DB_ROOT_PASSWORD} \
-    -e MYSQL_PASSWORD={$DB_PASSWORD} \
-    -e MYSQL_USER={$DB_USERNAME} \
+    -e MYSQL_DATABASE=${DB_DATABASE} \
+    -e MYSQL_ROOT_PASSWORD=${DB_PASSWORD}${DB_PASSWORD} \
+    -e MYSQL_PASSWORD=${DB_PASSWORD} \
+    -e MYSQL_USER=${DB_USERNAME} \
     --mount type=bind,source=../mysql/initdb.d,destination=/docker-entrypoint-initdb.d \
-    --mount type=bind,source=~/.local/share/containers/storage/volumes/${APP_NAME}_mysqldata/_data,destination=/var/lib/mysql,bind-propagation=Z \
-    ${ADD_HOSTS} \
+    --mount type=bind,source=/home/${WWWUSER}/.local/share/containers/storage/volumes/${APP_NAME}_mysqldata/_data,destination=/var/lib/mysql,bind-propagation=Z \
+    --add-host=${APP_ABBR}-nginx:127.0.0.1 --add-host=${APP_ABBR}-redis:127.0.0.1 --add-host=${APP_ABBR}-php:127.0.0.1 \
     ${LABELS} -l com.docker.compose.service=${APP_ABBR}-mysql \
     --health-cmd='/bin/sh -c mysqladmin ping' \
     mysql:8.0
 
   echo -e "Starting up the Nginx container [${APP_ABBR}-nginx]..."
-  podman run --name==${APP_ABBR}-nginx -d --pod=${APP_NAME} \
+  podman run --name=${APP_ABBR}-nginx -d --pod=${APP_NAME} \
     --mount type=bind,source=../../,destination=/var/www \
     --mount type=bind,source=../nginx/conf.d,destination=/etc/nginx/conf.d \
-    ${ADD_HOSTS} \
+    --add-host=${APP_ABBR}-mysql:127.0.0.1 --add-host=${APP_ABBR}-redis:127.0.0.1 --add-host=${APP_ABBR}-php:127.0.0.1 \
     ${LABELS} \
     -l com.docker.compose.service==${APP_ABBR}-nginx \
     nginxinc/nginx-unprivileged:1.18-alpine
 
   echo -e "Starting up the Redis container [${APP_ABBR}-redis]...";
   podman run --name=${APP_ABBR}-redis -d --pod=${APP_NAME} \
-    --mount type=bind,source=~/.local/share/containers/storage/volumes/${APP_NAME}_redisdata/_data,destination=/data,bind-propagation=Z \
-    ${ADD_HOSTS} \
+    --mount type=bind,source=/home/${WWWUSER}/.local/share/containers/storage/volumes/${APP_NAME}_redisdata/_data,destination=/data,bind-propagation=Z \
+    --add-host=${APP_ABBR}-mysql:127.0.0.1 --add-host=${APP_ABBR}-nginx:127.0.0.1 --add-host=${APP_ABBR}-php:127.0.0.1 \
     ${LABELS} -l com.docker.compose.service=${APP_ABBR}-redis\
     --health-cmd='/bin/sh -c redis-cli ping' \
     redis:6-alpine
@@ -129,7 +136,7 @@ elif [ "$ACTION" == "up" ]; then
   echo -e "Starting up the PHP-FPM container [${APP_ABBR}-php]..."
   podman run --name=${APP_ABBR}-php -d --pod=${APP_NAME} --userns=host \
     --mount type=bind,source=../../,destination=/var/www/ \
-    ${ADD_HOSTS} \
+    --add-host=${APP_ABBR}-mysql:127.0.0.1 --add-host=${APP_ABBR}-nginx:127.0.0.1 --add-host=${APP_ABBR}-redis:127.0.0.1 \
     ${LABELS} -l com.docker.compose.service=${APP_ABBR}-php \
     -w /var/www/ \
     alpine-${APP_ABBR}-php
@@ -153,6 +160,12 @@ elif [ "${ACTION}" == "down" ]; then
   podman pod rm ${APP_NAME}
   echo -e "[\033[1;32mDONE\033[0m]\n"
   exit 0
+
+# Run the application database migrations
+elif [ "$ACTION" == "migrate" ]; then
+  _env
+  echo "Running database migrations..."
+  podman exec -it ${APP_ABBR}-php php artisan migrate
 
 # Initialize the Laravel app from within the container...
 elif [ "$ACTION" == "init" ]; then
@@ -200,13 +213,8 @@ elif [ "$ACTION" == "init" ]; then
   echo -e "[\033[1;32mDONE\033[0m] Don't forget to configure your .env!\n"
   exit 0
 
-# Run the application database migrations
-elif [ "$ACTION" == "migrate" ]; then
-  echo "Running database migrations..."
-  podman exec -it ${APP_ABBR}-php php artisan migrate
-
 else
-  echo -e "${RED}No action was specified!${NC} use ${WHITE}build, up, down."
+  echo -e "${RED}No action was specified!${NC} use ${WHITE}build, up, down, init, migrate."
   exit 1
 fi
 
