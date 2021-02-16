@@ -70,10 +70,10 @@ function stack_is_not_running {
 # Source the ".env" file and setup some vars...
 function _env {
   if [ -f ../../.env ]; then
-    echo -e "Sourcing the .env file..."
+    echo "Sourcing the .env file..."
     source ../../.env
   else
-    echo -e "No .env file found... skipping"
+    echo "No .env file found... skipping"
   fi
   APP_ABBR=${APP_ABBR:-"ld"}
   APP_NAME=${APP_NAME:-"LocalDomain"}
@@ -84,8 +84,11 @@ function _env {
 # Build the containers...
 if [ "$ACTION" == "build" ]; then
   _env
+  echo "Setting up rootless permissions on the storage volume...";
+  podman unshare chown -R ${WWWUID}:${WWWUID} {$base_dir}/storage/*
+
   echo -e "Building the application container image for ${APP_NAME}..."
-  podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile-composer --build-arg=uid=${WWWUID} --build-arg=user=${WWWUSER} ../php-fpm
+  podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile-rootless --build-arg=uid=${WWWUID} --build-arg=user=${WWWUSER} ../php-fpm
 
 # Bring up the stack...
 elif [ "$ACTION" == "up" ]; then
