@@ -85,7 +85,7 @@ function _env {
 if [ "$ACTION" == "build" ]; then
   _env
   echo "Setting up rootless permissions on the storage volume...";
-  podman unshare chown -R ${WWWUID}:${WWWUID} {$base_dir}/storage/*
+  podman unshare chown -R ${WWWUID}:${WWWUID} ../../storage/*
 
   echo -e "Building the application container image for ${APP_NAME}..."
   podman build -t ${IMAGE_NAME} -f ../php-fpm/Containerfile-rootless --build-arg=uid=${WWWUID} --build-arg=user=${WWWUSER} ../php-fpm
