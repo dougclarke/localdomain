@@ -11,7 +11,9 @@ class PodUp extends Command
      *
      * @var string
      */
-    protected $signature = 'pod:up {--zap : Start the stack including OWASP ZAP}';
+    protected $signature = 'pod:up
+                              {--zap : Start the stack including OWASP ZAP}
+                              {--mailhog : Start the mailhog SMTP container}';
 
     /**
      * The console command description.
@@ -52,6 +54,20 @@ class PodUp extends Command
       $zap_image = "owasp/zap2docker-weekly";
 
       $zap = ($this->option('zap')) ? true : false;
+      $mailhog = ($this->option('mailhog')) ? true : false;
+
+      $env = env('APP_ENV');
+      $mail_host = env('MAIL_HOST');
+      $mail_port = env('MAIL_PORT');
+      $mail_user = env('MAIL_USERNAME');
+      $mail_pass = env('MAIL_PASSWORD');
+      if(preg_match("/local|dev|development/i",$env)){
+        if($mail_host == "localhost" && $mail_port = 1025 && is_null($mail_user) && is_null($mail_pass)){
+          $mailhog = true;
+        }
+      }
+
+      $mailhog_ports = ($mailhog) ? "-p 1025:1025 -p 8025:8025" : "";
 
       //
       // Check for the podman executable
@@ -110,12 +126,10 @@ class PodUp extends Command
         die($this->error("You need to configure your MySQL settings in your .env file."));
       }
 
-      if($zap){
-        $add_hosts = "--add-host {$abbr}-zap:127.0.0.1 --add-host {$abbr}-php:127.0.0.1 --add-host {$abbr}-mysql:127.0.0.1 --add-host {$abbr}-nginx:127.0.0.1 --add-host {$abbr}-redis:127.0.0.1";
-      }
-      else {
-        $add_hosts = "--add-host {$abbr}-php:127.0.0.1 --add-host {$abbr}-mysql:127.0.0.1 --add-host {$abbr}-nginx:127.0.0.1 --add-host {$abbr}-redis:127.0.0.1";
-      }
+      $add_zap = ($zap) ? "--add-host {$abbr}-zap:127.0.0.1" : "";
+      $add_mailhog = ($mailhog) ? "--add-host {$abbr}-mailhog:127.0.0.1" : "";
+
+      $add_hosts = "{$add_zap} {$add_mailhog} --add-host {$abbr}-php:127.0.0.1 --add-host {$abbr}-mysql:127.0.0.1 --add-host {$abbr}-nginx:127.0.0.1 --add-host {$abbr}-redis:127.0.0.1";
       $labels = "-l io.podman.compose.config-hash=123 -l io.podman.compose.project={$app_name} -l io.podman.compose.version=0.0.1 -l com.docker.compose.container-number=1";
 
       //
@@ -123,7 +137,7 @@ class PodUp extends Command
       //
       if($zap){
         echo "Setting up the {$app_name} ZAP application stack...\n";
-        exec("podman pod create --name={$app_name} --share net -p 8080:8080 -p 8090:8090", $output);
+        exec("podman pod create --name={$app_name} --share net -p 8080:8080 -p 8090:8090 {$mailhog_ports}", $output);
 
         // Create the ZAP data and conf dirs if they do not exist
         if(!is_dir(base_path()."/stack/zap/data")) mkdir(base_path()."/stack/zap/data", 0754, true);
@@ -142,7 +156,7 @@ class PodUp extends Command
       }
       else {
         echo "Setting up the {$app_name} application stack...\n";
-        exec("podman pod create --name={$app_name} --share net -p 8080:8080", $output);
+        exec("podman pod create --name={$app_name} --share net -p 8080:8080 {$mailhog_ports}", $output);
       }
 
       # MySQL and Redis volumes
@@ -206,6 +220,16 @@ class PodUp extends Command
         -w /var/www/ \
         alpine-{$abbr}-php", $output);
       echo "[\033[1;32mDONE\033[0m]\n";
+
+      # Mailhog container
+      if($mailhog){
+        echo "Starting up the MailHog container [{$abbr}-mailhog]...\t";
+        exec("podman run --name={$abbr}-mailhog -d --pod={$app_name} \
+          {$add_hosts} \
+          {$labels} -l com.docker.compose.service={$abbr}-mailhog \
+          mailhog/mailhog", $output);
+        echo "[\033[1;32mDONE\033[0m]\n";
+      }
 
       $this->call("pod:status");
 
