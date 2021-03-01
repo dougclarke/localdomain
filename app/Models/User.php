@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\UuidModelTrait;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -11,14 +12,29 @@ use Laravel\Jetstream\HasProfilePhoto;
 use Laravel\Jetstream\HasTeams;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
+    use UuidModelTrait;
     use HasApiTokens;
     use HasFactory;
     use HasProfilePhoto;
     use HasTeams;
     use Notifiable;
     use TwoFactorAuthenticatable;
+
+    /**
+    * The "type" of the primary key ID.
+    *
+    * @var string
+    */
+    protected $keyType = 'uuid';
+
+    /**
+    * The primary key column name.
+    *
+    * @var string
+    */
+    protected $primaryKey = 'id';
 
     /**
      * The attributes that are mass assignable.
