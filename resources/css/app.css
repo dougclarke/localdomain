@@ -1,3 +1,28 @@
 @import 'tailwindcss/base';
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
+
+body, .body {
+  font-family: 'Raleway';
+  background: #f4f5f7;
+  background: -moz-radial-gradient(center, ellipse cover, #f4f5f7 26%, #f4f5f7 26%, #b7b7b7 100%);
+  background: -webkit-radial-gradient(center, ellipse cover, #f4f5f7 26%,#f4f5f7 26%,#b7b7b7 100%);
+  background-image: radial-gradient(ellipse at center, #f4f5f7 26%,#f4f5f7 26%,#b7b7b7 100%);
+  filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#f4f5f7', endColorstr='#b7b7b7',GradientType=1 );
+}
+
+.ld-logo-text {
+  color: #718096;
+  font-size: 36px;
+  font-weight: 200;
+  line-height: 0.75;
+}
+
+.ld-logo-text b {
+  font-weight: 600;
+}
+
+.ld-logo-text .powered-by {
+  font-size: 0.5em;
+  letter-spacing: 22px;
+}
