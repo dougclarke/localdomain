@@ -42,6 +42,7 @@ class PodDown extends Command
       $output = null;
       $running = false;
       $zap = ($this->option('zap')) ? true : false;
+      $mailhog = false;
 
       if(!got_podman()) die("The podman command was not found.\n");
 
@@ -61,11 +62,15 @@ class PodDown extends Command
       //
       // Is ZAP running?
       //
-      exec('podman ps --format "{{.Names}}"');
+      exec('podman ps --format "{{.Names}}"', $output);
 
       foreach($output as $container){
         if(stristr($container, "zap")){
           $zap = true;
+        }
+
+        if(stristr($container, "mailhog")){
+          $mailhog = true;
         }
       }
 
@@ -74,11 +79,13 @@ class PodDown extends Command
       //
       echo "Stopping the {$app_name} containers...\t";
       if($zap) exec("podman stop -t=1 {$abbr}-zap", $output);
+      if($mailhog) exec("podman stop -t=1 {$abbr}-mailhog", $output);
       exec("podman stop -t=1 {$abbr}-mysql", $output);
       exec("podman stop -t=1 {$abbr}-nginx", $output);
       exec("podman stop -t=1 {$abbr}-redis", $output);
       exec("podman stop -t=1 {$abbr}-php", $output);
       if($zap) exec("podman rm {$abbr}-zap", $output);
+      if($mailhog) exec("podman rm {$abbr}-mailhog", $output);
       exec("podman rm {$abbr}-mysql", $output);
       exec("podman rm {$abbr}-nginx", $output);
       exec("podman rm {$abbr}-redis", $output);

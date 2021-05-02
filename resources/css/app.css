@@ -26,3 +26,39 @@ body, .body {
   font-size: 0.5em;
   letter-spacing: 22px;
 }
+
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md font-semibold text-xs transition ease-in-out duration-150;
+}
+
+.btn:focus {
+  @apply outline-none;
+}
+
+.btn-primary {
+
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white uppercase tracking-widest;
+}
+
+.btn-danger:active {
+  @apply bg-red-600;
+}
+
+.btn-danger:hover {
+  @apply bg-red-500;
+}
+
+.btn-danger:focus {
+  @apply border-red-700 shadow-outline-red;
+}
+
+.btn_warning {
+
+}
+
+.btn-info {
+
+}

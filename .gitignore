@@ -1,6 +1,7 @@
 /node_modules
 /public/hot
 /public/storage
+/stack/zap/data
 /storage/*.key
 /vendor
 .editorconfig

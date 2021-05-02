@@ -50,13 +50,20 @@ class PodBuild extends Command
       $user = exec('id -un');
 
       if($this->option('rootless')){
-        echo "Setting up rootless permissions on the storage volume...";
+        echo "Setting up rootless permissions on the storage volume and bootstrap cache...";
         exec("podman unshare chown -R ${uid}:${uid} {$base_dir}/storage/*", $output, $retval);
         if($retval != 0){
           foreach($output as $line){
             $this->line($line);
           }
           $this->warning("Failed to set the storage permissions. Please see the output above for more information.");
+        }
+        exec("podman unshare chown -R ${uid}:${uid} {$base_dir}/bootstrap/cache", $output, $retval);
+        if($retval != 0){
+          foreach($output as $line){
+            $this->line($line);
+          }
+          $this->warning("Failed to set the bootstrap cache directory permissions. Please see the output above for more information.");
         }
         echo "Building the \033[1;37mrootless\033[0m {$app_name} {$image_name} image... this may take a while.\t";
         exec("podman build -t {$image_name} -f {$stack_dir}/php-fpm/Containerfile-rootless --build-arg=uid={$uid} --build-arg=user={$user} {$stack_dir}/php-fpm", $output, $retval);

@@ -13,6 +13,7 @@ class PodUp extends Command
      */
     protected $signature = 'pod:up
                               {--zap : Start the stack including OWASP ZAP}
+                              {--webswing : Start ZAP with the WebSwing UI}
                               {--mailhog : Start the mailhog SMTP container}';
 
     /**
@@ -46,14 +47,18 @@ class PodUp extends Command
       $abbr = env('APP_ABBR', 'ld');
       $app_name = env('APP_NAME');
       $image_name = env('IMAGE_NAME', "alpine-{$abbr}-php");
+      $pod_port = env('POD_PORT', 8000);
       $output = null;
       $retval = null;
       $running = false;
+      $err = false;
       $image_name = "alpine-{$abbr}-php";
       // $zap_image = "owasp/zap2docker-bare:2.10.0";
       $zap_image = "owasp/zap2docker-weekly";
 
       $zap = ($this->option('zap')) ? true : false;
+      $webswing = ($this->option('webswing')) ? true : false;
+      if($webswing) $zap = true;
       $mailhog = ($this->option('mailhog')) ? true : false;
 
       $env = env('APP_ENV');
@@ -92,7 +97,7 @@ class PodUp extends Command
       //
       exec("podman image exists {$image_name}", $output, $retval);
       if($retval != 0) {
-        if($this->confirm("The {$image_name} app container image has not yet been build. Would you like to build the image now?")){
+        if($this->confirm("The {$image_name} app container image has not yet been built. Would you like to build the image now?")){
           $this->call('pod:build');
         }
         else {
@@ -137,35 +142,62 @@ class PodUp extends Command
       //
       if($zap){
         echo "Setting up the {$app_name} ZAP application stack...\n";
-        exec("podman pod create --name={$app_name} --share net -p 8080:8080 -p 8090:8090 {$mailhog_ports}", $output);
+        exec("podman pod create --name={$app_name} --share net -p {$pod_port}:{$pod_port} -p 8080:8080 -p 8090:8090 {$mailhog_ports}", $output);
 
         // Create the ZAP data and conf dirs if they do not exist
         if(!is_dir(base_path()."/stack/zap/data")) mkdir(base_path()."/stack/zap/data", 0754, true);
         if(!is_dir(base_path()."/stack/zap/conf")) mkdir(base_path()."/stack/zap/conf", 0754, true);
 
+        #
         # OWASP ZAP container
+        #
         echo "Starting up the ZAP container [{$abbr}-zap]...\t";
-        exec("podman run -u root --name={$abbr}-zap -d --pod={$app_name} \
-          --mount type=bind,source={$stack_dir}/zap/data,destination=/zap/wrk \
-          --mount type=bind,source={$stack_dir}/zap/conf,destination=/zap/conf \
-          {$add_hosts} \
-          {$labels} \
-          -l com.docker.compose.service={$abbr}-zap \
-          {$zap_image} zap.sh -daemon -host 0.0.0.0 -port 8090", $output);
-        echo "[\033[1;32mDONE\033[0m]\n";
+
+        if($webswing){
+          exec("podman run -u root --name={$abbr}-zap -d --pod={$app_name} \
+            --mount type=bind,source={$stack_dir}/zap/data,destination=/zap/wrk \
+            --mount type=bind,source={$stack_dir}/zap/conf,destination=/zap/conf \
+            {$add_hosts} \
+            {$labels} \
+            -l com.docker.compose.service={$abbr}-zap \
+            {$zap_image} zap-webswing.sh", $output, $retval);
+        }
+        else {
+          exec("podman run -u root --name={$abbr}-zap -d --pod={$app_name} \
+            --mount type=bind,source={$stack_dir}/zap/data,destination=/zap/wrk \
+            --mount type=bind,source={$stack_dir}/zap/conf,destination=/zap/conf \
+            {$add_hosts} \
+            {$labels} \
+            -l com.docker.compose.service={$abbr}-zap \
+            {$zap_image} zap.sh -daemon -host 0.0.0.0 -port 8090 -config api.addrs.addr.name=.* -config api.addrs.addr.regex=true", $output, $retval);
+        }
+
+        if($retval != 0){
+          $error['name'] = "{$abbr}-zap";
+          $error['log'] = $output;
+          $err[] = $error;
+          echo "[\033[1;31mFAILED\033[0m]\n";
+        }
+        else {
+          echo "[\033[1;32mDONE\033[0m]\n";
+        }
       }
       else {
         echo "Setting up the {$app_name} application stack...\n";
-        exec("podman pod create --name={$app_name} --share net -p 8080:8080 {$mailhog_ports}", $output);
+        exec("podman pod create --name={$app_name} --share net -p {$pod_port}:{$pod_port} {$mailhog_ports}", $output);
       }
 
+      #
       # MySQL and Redis volumes
+      #
       echo "Setting up the {$app_name} MySQL and Redis volumes...\t";
       exec("podman volume inspect {$app_name}_mysqldata || podman volume create {$app_name}_mysqldata", $output);
       exec("podman volume inspect {$app_name}_redisdata || podman volume create {$app_name}_redisdata", $output);
       echo "[\033[1;32mDONE\033[0m]\n";
 
+      #
       # MySQL container
+      #
       echo "Starting up the MySQL container [{$abbr}-mysql]...\t";
       if(!is_dir(base_path()."/stack/mysql/db")) mkdir(base_path()."/stack/mysql/db", 0754, true);
       if(!is_dir(base_path()."/stack/mysql/initdb.d")) mkdir(base_path()."/stack/mysql/initdb.d", 0754, true);
@@ -179,11 +211,26 @@ class PodUp extends Command
         {$add_hosts} \
         {$labels} -l com.docker.compose.service={$abbr}-mysql \
         --health-cmd='/bin/sh -c mysqladmin ping' \
-        mysql:8.0", $output);
-      echo "[\033[1;32mDONE\033[0m]\n";
+        mysql:8.0", $output, $retval);
+      if($retval != 0){
+        $error['name'] = "{$abbr}-mysql";
+        $error['log'] = $output;
+        $err[] = $error;
+        echo "[\033[1;31mFAILED\033[0m]\n";
+      }
+      else {
+        echo "[\033[1;32mDONE\033[0m]\n";
+      }
 
+      #
       # Nginx rootless container
+      #
       echo "Starting up the Nginx container [{$abbr}-nginx]...\t";
+
+      $nginx_conf = file_get_contents("{$stack_dir}/nginx/conf.d/laravel_app.conf.template");
+      $nginx_conf = str_replace('${POD_PORT}', $pod_port, $nginx_conf);
+      file_put_contents("{$stack_dir}/nginx/conf.d/laravel_app.conf", $nginx_conf);
+
       exec("podman run --name={$abbr}-nginx -d --pod={$app_name} \
         --mount type=bind,source={$base_dir},destination=/var/www \
         --mount type=bind,source={$stack_dir}/nginx/conf.d,destination=/etc/nginx/conf.d \
@@ -191,17 +238,20 @@ class PodUp extends Command
         {$labels} \
         -l com.docker.compose.service={$abbr}-nginx \
         nginxinc/nginx-unprivileged:1.18-alpine", $output, $retval);
+
       if($retval != 0){
-        foreach($output as $line){
-          $this->line($line);
-        }
-        die($this->error("Failed to start the nginx container. Please see the above logs."));
+        $error['name'] = "{$abbr}-nginx";
+        $error['log'] = $output;
+        $err[] = $error;
+        echo "[\033[1;31mFAILED\033[0m]\n";
       }
       else {
         echo "[\033[1;32mDONE\033[0m]\n";
       }
 
+      #
       # Redis container
+      #
       echo "Starting up the Redis container [{$abbr}-redis]...\t";
       exec("podman run --name={$abbr}-redis -d --pod={$app_name} \
         --mount type=bind,source={$vol_dir}/{$app_name}_redisdata/_data,destination=/data,bind-propagation=Z \
@@ -209,9 +259,20 @@ class PodUp extends Command
         {$labels} -l com.docker.compose.service={$abbr}-redis\
         --health-cmd='/bin/sh -c redis-cli ping' \
         redis:6-alpine", $output);
-      echo "[\033[1;32mDONE\033[0m]\n";
+      // echo "[\033[1;32mDONE\033[0m]\n";
+      if($retval != 0){
+        $error['name'] = "{$abbr}-redis";
+        $error['log'] = $output;
+        $err[] = $error;
+        echo "[\033[1;31mFAILED\033[0m]\n";
+      }
+      else {
+        echo "[\033[1;32mDONE\033[0m]\n";
+      }
 
+      #
       # PHP-FPM container
+      #
       echo "Starting up the PHP-FPM container [{$abbr}-php]...\t";
       exec("podman run --name={$abbr}-php -d --pod={$app_name} --userns=host \
         --mount type=bind,source={$base_dir},destination=/var/www/ \
@@ -219,33 +280,75 @@ class PodUp extends Command
         {$labels} -l com.docker.compose.service={$abbr}-php \
         -w /var/www/ \
         alpine-{$abbr}-php", $output);
-      echo "[\033[1;32mDONE\033[0m]\n";
+      // echo "[\033[1;32mDONE\033[0m]\n";
+      if($retval != 0){
+        $error['name'] = "{$abbr}-php";
+        $error['log'] = $output;
+        $err[] = $error;
+        echo "[\033[1;31mFAILED\033[0m]\n";
+      }
+      else {
+        echo "[\033[1;32mDONE\033[0m]\n";
+      }
 
+      #
       # Mailhog container
+      #
       if($mailhog){
         echo "Starting up the MailHog container [{$abbr}-mailhog]...\t";
         exec("podman run --name={$abbr}-mailhog -d --pod={$app_name} \
           {$add_hosts} \
           {$labels} -l com.docker.compose.service={$abbr}-mailhog \
-          mailhog/mailhog", $output);
-        echo "[\033[1;32mDONE\033[0m]\n";
+          mailhog/mailhog", $output, $retval);
+        // echo "[\033[1;32mDONE\033[0m]\n";
+        if($retval != 0){
+          $error['name'] = "{$abbr}-mailhog";
+          $error['log'] = $output;
+          $err[] = $error;
+          echo "[\033[1;31mFAILED\033[0m]\n";
+        }
+        else {
+          echo "[\033[1;32mDONE\033[0m]\n";
+        }
       }
 
-      $this->call("pod:status");
 
-      if($zap){
-        $zap_url = str_replace("8080", "8090", url('/'));
-        echo "---\n";
-        echo "The {$app_name} container stack is up and ready!\nCheck it out at ".url('/')."\n";
-        echo "OWASP Zed Attack Proxy running on {$zap_url}\n";
-        echo "\n";
+      if(empty($err)){
+        $this->call("pod:status");
+
+        if($zap){
+          $zap_port = ($webswing) ? "8080" : "8090";
+          $zap_url = str_replace("8000", $zap_port, url('/'));
+          echo "---\n";
+          echo "The {$app_name} container stack is up and ready!\nCheck it out at ".url('/')."\n";
+          if($webswing){
+            echo "OWASP ZAP WebSwing UI running on {$zap_url}\n";
+          }
+          else {
+            echo "OWASP Zed Attack Proxy running on {$zap_url}\n";
+          }
+          echo "\n";
+        }
+        else {
+          echo "---\n";
+          echo "The {$app_name} container stack is up and ready!\nCheck it out at ".url('/')."\n";
+          echo "\n";
+        }
+
+        return 0;
       }
       else {
-        echo "---\n";
-        echo "The {$app_name} container stack is up and ready!\nCheck it out at ".url('/')."\n";
-        echo "\n";
+        foreach($err as $e){
+          echo "\n";
+          $this->error("{$e['name']} error log:");
+          foreach($e['log'] as $l){
+            $this->line($l);
+          }
+          echo "---\n";
+        }
+
+        return 2;
       }
 
-      return 0;
     }
 }

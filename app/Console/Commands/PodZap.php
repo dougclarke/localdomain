@@ -13,9 +13,9 @@ class PodZap extends Command
      */
     protected $signature = 'pod:zap
                               {type=baseline : The type of scan to perform: [baseline], api or full}
-                              {--api-type=openapi : The type of API scan to perform [openapi, soap, graphql]}
+                              {--api-type=? : The type of API scan to perform [openapi, soap, graphql]}
                               {--api-src=? : The file or URL for the API definition}
-                              {--target="http://localhost:8080" : Target URL for the scan}';
+                              {--target="http://localhost:8000" : Target URL for the scan}';
 
     /**
      * The console command description.
@@ -50,6 +50,7 @@ class PodZap extends Command
       $abbr = env('APP_ABBR', 'ld');
       $app_name = env('APP_NAME');
       $app_url = env('APP_URL');
+      $pod_port = env('POD_PORT', 8000);
       // $image_name = "owasp/zap2docker-bare:2.10.0";
       $image_name = "owasp/zap2docker-weekly";
       $output = null;
@@ -57,7 +58,7 @@ class PodZap extends Command
       $running = false;
 
       $type = $this->argument('type');
-      $api_type = $this->argument('api-type');
+      $api_type = ($this->option('api-type')) ? $this->option('api-type') : 'openapi';
       $api_src = ($this->option('api-src')) ? $this->option('api-src') : null;
       $target = ($this->option('target')) ? $this->option('target') : $app_url;
 
@@ -113,7 +114,7 @@ class PodZap extends Command
           zap-full-scan.py \
           {$cs} {$conf} \
           -t {$target} \
-          -r {$report}", $output, $retval);
+          -r {$report} -a");
       }
 
       // API scan...
@@ -125,7 +126,8 @@ class PodZap extends Command
           zap-api-scan.py \
           {$cs} {$conf} \
           -t {$target} \
-          -r {$report}", $output, $retval);
+          -f {$api_type} \
+          -r {$report}");
       }
 
       // Baseline scan...
@@ -135,9 +137,8 @@ class PodZap extends Command
         exec("podman exec -u root {$abbr}-zap \
           zap-baseline.py \
           {$cs} {$conf} \
-          -t {$api_src} \
-          -f {$api_type} \
-          -r {$report}", $output, $retval);
+          -t {$target} \
+          -r {$report} -a");
       }
 
       \Artisan::call("pod:down", ["--zap" => true]);
