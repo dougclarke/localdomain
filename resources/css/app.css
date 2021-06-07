@@ -40,19 +40,19 @@ body, .body {
 }
 
 .btn-danger {
-  @apply bg-red-600 text-white uppercase tracking-widest;
+  /* @apply bg-red-600 text-white uppercase tracking-widest; */
 }
 
 .btn-danger:active {
-  @apply bg-red-600;
+  /* @apply bg-red-600; */
 }
 
 .btn-danger:hover {
-  @apply bg-red-500;
+  /* @apply bg-red-500; */
 }
 
 .btn-danger:focus {
-  @apply border-red-700 shadow-outline-red;
+  /* @apply border-red-700 shadow-outline-red; */
 }
 
 .btn_warning {
